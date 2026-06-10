@@ -148,7 +148,7 @@ function renderState(status) {
     message = "Create network first. Without the virtual interfaces, Attach FRER will fail with unknown interface errors.";
   } else if (!frerRunning) {
     title = "FRER not attached";
-    message = "The network exists. Attach FRER to load the XDP replication and elimination programs.";
+    message = status.frerHealth?.message || "The network exists. Attach FRER to load the XDP replication and elimination programs.";
   } else if (!trafficSeen) {
     title = "Ready for traffic";
     message = "FRER is running. Click Run test traffic to make the counters move.";

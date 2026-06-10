@@ -181,6 +181,19 @@ def pid_status():
     return pids
 
 
+def frer_health(pids):
+    alive = [item for item in pids if item["alive"]]
+    expected = len(LOG_NAMES)
+    if len(alive) == expected:
+        return {"ok": True, "message": "all FRER programs running"}
+    if not pids:
+        return {"ok": False, "message": "FRER is not attached"}
+    return {
+        "ok": False,
+        "message": f"{len(alive)} of {expected} FRER programs are running",
+    }
+
+
 def parse_log_stats(lines):
     latest = None
     for line in lines:
@@ -204,7 +217,8 @@ def collect_status():
     pids = pid_status()
     logs = collect_logs()
     ready = topology_ready(links)
-    frer_running = any(item["alive"] for item in pids)
+    health = frer_health(pids)
+    frer_running = health["ok"]
     latest_stats = [logs[name]["stats"] for name in LOG_NAMES if logs[name]["stats"]]
     traffic_seen = any(
         stats and (stats.get("replicated", 0) > 0 or stats.get("passed", 0) > 0)
@@ -223,6 +237,7 @@ def collect_status():
         "namespaces": {"pc1": namespace_exists("pc1"), "pc2": namespace_exists("pc2")},
         "links": links,
         "frerRunning": frer_running,
+        "frerHealth": health,
         "trafficSeen": traffic_seen,
         "pids": pids,
         "logs": logs,

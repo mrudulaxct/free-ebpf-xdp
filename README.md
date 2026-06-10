@@ -205,6 +205,15 @@ counters, dashboard action history, and the FRER loader output. The dashboard
 blocks invalid steps, such as attaching FRER before the demo interfaces exist,
 so the review flow is easier to explain.
 
+To verify the complete demo from one terminal before presenting:
+
+```bash
+sudo ./scripts/demo-smoke-test.sh
+```
+
+It rebuilds, recreates the topology, attaches FRER, sends traffic, and fails if
+replication, pass, or duplicate counters stay at zero.
+
 ## Running on Real Interfaces
 
 Use the same commands with physical interface names:

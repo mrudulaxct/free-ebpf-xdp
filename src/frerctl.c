@@ -176,6 +176,9 @@ int main(int argc, char **argv)
 		{0, 0, 0, 0},
 	};
 
+	setvbuf(stdout, NULL, _IONBF, 0);
+	setvbuf(stderr, NULL, _IONBF, 0);
+
 	if (argc < 2) {
 		usage(argv[0]);
 		return 1;
