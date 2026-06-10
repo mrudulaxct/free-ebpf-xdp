@@ -16,6 +16,7 @@ struct stream_cfg {
 	__u32 enabled;
 	__u32 recovery_timeout_ns;
 	__u32 egress_ifindex;
+	__u32 vlan_id;
 };
 
 struct seq_gen {
@@ -261,15 +262,20 @@ int main(int argc, char **argv)
 		.enabled = 1,
 		.recovery_timeout_ns = timeout_ms * 1000U * 1000U,
 		.egress_ifindex = 0,
+		.vlan_id = vid,
 	};
 	if (!strcmp(mode, "eliminate"))
 		cfg.egress_ifindex = ifindex_or_die(egress_items[0]);
 
 	struct seq_gen gen = {};
 	struct recovery_state rec = {};
+	__u32 default_key = 0;
+
 	bpf_map_update_elem(cfg_fd, &vid, &cfg, BPF_ANY);
 	bpf_map_update_elem(seq_fd, &vid, &gen, BPF_ANY);
 	bpf_map_update_elem(rec_fd, &vid, &rec, BPF_ANY);
+	bpf_map_update_elem(cfg_fd, &default_key, &cfg, BPF_ANY);
+	bpf_map_update_elem(seq_fd, &default_key, &gen, BPF_ANY);
 
 	if (!strcmp(mode, "replicate")) {
 		for (int i = 0; i < egress_count; i++) {

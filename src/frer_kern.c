@@ -18,6 +18,7 @@
 #define ETH_SIZE 14
 #define VLAN_SIZE 4
 #define RTAG_SIZE 6
+#define VLAN_RTAG_SIZE (VLAN_SIZE + RTAG_SIZE)
 #define FRER_RTAG_ETHERTYPE 0xf1c1
 #define FRER_WINDOW_SIZE 64
 
@@ -31,6 +32,7 @@ struct stream_cfg {
 	__u32 enabled;
 	__u32 recovery_timeout_ns;
 	__u32 egress_ifindex;
+	__u32 vlan_id;
 };
 
 struct seq_gen {
@@ -146,6 +148,41 @@ static __always_inline int add_rtag(struct xdp_md *ctx, __u16 seq)
 	return 0;
 }
 
+static __always_inline int add_vlan_rtag(struct xdp_md *ctx, __u16 seq,
+					 __u32 vid)
+{
+	void *old_data = (void *)(long)ctx->data;
+	void *old_end = (void *)(long)ctx->data_end;
+
+	if (old_data + ETH_SIZE > old_end)
+		return -1;
+
+	__be16 original_proto = ((struct ethhdr *)old_data)->h_proto;
+
+	if (bpf_xdp_adjust_head(ctx, 0 - VLAN_RTAG_SIZE))
+		return -1;
+
+	void *data = (void *)(long)ctx->data;
+	void *data_end = (void *)(long)ctx->data_end;
+	if (data + ETH_SIZE + VLAN_RTAG_SIZE > data_end)
+		return -1;
+
+	__builtin_memmove(data, data + VLAN_RTAG_SIZE, ETH_SIZE);
+
+	struct ethhdr *eth = data;
+	struct vlan_hdr *vlan = data + ETH_SIZE;
+	struct rtag_hdr *rtag = data + ETH_SIZE + VLAN_SIZE;
+
+	eth->h_proto = bpf_htons(ETH_P_8021Q);
+	vlan->h_vlan_TCI = bpf_htons(vid & VLAN_VID_MASK);
+	vlan->h_vlan_encapsulated_proto = bpf_htons(FRER_RTAG_ETHERTYPE);
+
+	__builtin_memset(rtag, 0, sizeof(*rtag));
+	rtag->seq = bpf_htons(seq);
+	rtag->next_proto = original_proto;
+	return 0;
+}
+
 static __always_inline int remove_rtag(struct xdp_md *ctx, __u16 *seq)
 {
 	void *data = (void *)(long)ctx->data;
@@ -231,31 +268,53 @@ int xdp_replicate(struct xdp_md *ctx)
 	struct ethhdr *eth;
 	struct vlan_hdr *vlan;
 	int parse_result;
+	__u32 cfg_key;
 
 	parse_result = parse_vlan(data, data_end, &eth, &vlan);
-	if (parse_result < 0) {
+	if (parse_result == -1) {
 		if (s)
-			s->malformed += parse_result == -1;
+			s->malformed++;
 		return XDP_PASS;
 	}
 
-	__u32 vid = vlan_id(vlan);
+	__u32 vid = 0;
+	if (parse_result == 0)
+		vid = vlan_id(vlan);
+	cfg_key = vid;
+
 	struct stream_cfg *cfg = bpf_map_lookup_elem(&stream_cfg, &vid);
 	struct seq_gen *gen = bpf_map_lookup_elem(&seqgens, &vid);
+	if (!cfg || !cfg->enabled || !gen) {
+		cfg_key = 0;
+		cfg = bpf_map_lookup_elem(&stream_cfg, &cfg_key);
+		gen = bpf_map_lookup_elem(&seqgens, &cfg_key);
+	}
 	if (!cfg || !cfg->enabled || !gen) {
 		if (s)
 			s->no_config++;
 		return XDP_PASS;
 	}
 
-	if (vlan->h_vlan_encapsulated_proto != bpf_htons(FRER_RTAG_ETHERTYPE)) {
+	if (parse_result == -2) {
 		__u16 seq;
 
 		bpf_spin_lock(&gen->lock);
 		seq = gen->next_seq++;
 		bpf_spin_unlock(&gen->lock);
 
-		if (add_rtag(ctx, seq) < 0) {
+		if (add_vlan_rtag(ctx, seq, cfg->vlan_id) < 0) {
+			if (s)
+				s->malformed++;
+			return XDP_DROP;
+		}
+	} else if (vlan->h_vlan_encapsulated_proto != bpf_htons(FRER_RTAG_ETHERTYPE)) {
+		__u16 seq;
+
+		bpf_spin_lock(&gen->lock);
+		seq = gen->next_seq++;
+		bpf_spin_unlock(&gen->lock);
+
+		if (parse_result == 0 && add_rtag(ctx, seq) < 0) {
 			if (s)
 				s->malformed++;
 			return XDP_DROP;

@@ -240,6 +240,7 @@ def action_command(action):
             None,
             None,
             [
+                ("Reset any old demo state", ["./scripts/cleanup-veth-demo.sh"], 30),
                 ("Build eBPF and userspace loader", ["make"], 60),
                 ("Create Linux veth topology", ["./scripts/setup-veth-demo.sh"], 30),
                 ("Attach FRER programs", ["./scripts/run-veth-frer.sh"], 20),
