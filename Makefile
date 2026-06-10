@@ -3,7 +3,7 @@ CC ?= cc
 CFLAGS ?= -O2 -g -Wall -Wextra
 BPF_CFLAGS ?= -O2 -g -Wall -target bpf
 
-.PHONY: all clean
+.PHONY: all clean dashboard
 
 all: build/frer_kern.o build/frerctl
 
@@ -18,3 +18,6 @@ build/frerctl: src/frerctl.c | build
 
 clean:
 	rm -rf build
+
+dashboard:
+	python3 dashboard/server.py

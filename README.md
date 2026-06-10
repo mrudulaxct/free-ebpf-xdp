@@ -171,6 +171,37 @@ Cleanup:
 sudo ./scripts/cleanup-veth-demo.sh
 ```
 
+## Run with the Dashboard
+
+For project review or classroom demonstration, you can run the same workflow from
+a local browser dashboard instead of typing every command manually.
+
+On the Linux demo machine:
+
+```bash
+sudo make dashboard
+```
+
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+The dashboard provides buttons for:
+
+- Build
+- Create the veth topology
+- Attach the four FRER/XDP programs
+- Run protected ping traffic
+- Fail one redundant path
+- Recover the path
+- Fail both paths
+- Cleanup
+
+It also shows the topology, live interface state, FRER counters, command output,
+and the key explanation points to present to a review committee.
+
 ## Running on Real Interfaces
 
 Use the same commands with physical interface names:

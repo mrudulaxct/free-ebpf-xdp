@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FRER XDP Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Kernel-Level FRER Implementation</p>
+          <h1>Per-Packet Service Protection Demo</h1>
+          <p class="lead">
+            Build the eBPF/XDP program, create the veth topology, attach replication and
+            elimination, run traffic, and demonstrate path failure recovery from one screen.
+          </p>
+        </div>
+        <div class="hero-status">
+          <span id="rootBadge" class="badge">checking</span>
+          <span id="buildBadge" class="badge">build</span>
+          <span id="frerBadge" class="badge">FRER</span>
+        </div>
+      </section>
+
+      <section class="diagram-band">
+        <div class="topology">
+          <div class="node">
+            <span>PC1 namespace</span>
+            <strong>10.0.0.1</strong>
+          </div>
+          <div class="pipe main">pc1-a.VLAN 100</div>
+          <div class="node accent">
+            <span>XDP Replicate</span>
+            <strong>R-tag + sequence</strong>
+          </div>
+          <div class="split">
+            <div id="pathAb0" class="path">ab0 -> ba0</div>
+            <div id="pathAb1" class="path">ab1 -> ba1</div>
+          </div>
+          <div class="node accent">
+            <span>XDP Eliminate</span>
+            <strong>first copy passes</strong>
+          </div>
+          <div class="pipe main">pc2-b.VLAN 100</div>
+          <div class="node">
+            <span>PC2 namespace</span>
+            <strong>10.0.0.2</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel span-7">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Guided Execution</p>
+              <h2>Demo Steps</h2>
+            </div>
+            <button class="ghost" id="refreshBtn">Refresh</button>
+          </div>
+          <div class="steps">
+            <button data-action="build">
+              <span class="step-num">1</span>
+              <span><strong>Build</strong><small>Compile XDP object and userspace loader</small></span>
+            </button>
+            <button data-action="setup">
+              <span class="step-num">2</span>
+              <span><strong>Create topology</strong><small>Make PC namespaces and two redundant veth paths</small></span>
+            </button>
+            <button data-action="start_frer">
+              <span class="step-num">3</span>
+              <span><strong>Attach FRER</strong><small>Start forward and reverse replication/elimination programs</small></span>
+            </button>
+            <button data-action="ping">
+              <span class="step-num">4</span>
+              <span><strong>Run protected ping</strong><small>Send VLAN 100 traffic from PC1 side to PC2</small></span>
+            </button>
+            <button data-action="fail_ab0">
+              <span class="step-num">5</span>
+              <span><strong>Fail path 1</strong><small>Bring ab0 down; traffic should continue over ab1</small></span>
+            </button>
+            <button data-action="recover_ab0">
+              <span class="step-num">6</span>
+              <span><strong>Recover path 1</strong><small>Bring ab0 back up</small></span>
+            </button>
+            <button data-action="fail_both">
+              <span class="step-num">7</span>
+              <span><strong>Fail both paths</strong><small>Show that service stops only when all redundancy is lost</small></span>
+            </button>
+            <button data-action="recover_both">
+              <span class="step-num">8</span>
+              <span><strong>Recover both paths</strong><small>Restore ab0 and ab1</small></span>
+            </button>
+            <button data-action="cleanup" class="danger">
+              <span class="step-num">9</span>
+              <span><strong>Cleanup</strong><small>Stop programs and remove namespaces, links, and pinned BPF links</small></span>
+            </button>
+          </div>
+        </article>
+
+        <article class="panel span-5">
+          <p class="eyebrow">Committee View</p>
+          <h2>What To Explain</h2>
+          <div class="talk-track">
+            <p><strong>FRER goal:</strong> send duplicate frames through independent paths so one path can fail without service interruption.</p>
+            <p><strong>Replication:</strong> XDP reads VLAN 100, inserts a 6-byte R-tag sequence number, then broadcasts the frame to ab0 and ab1.</p>
+            <p><strong>Elimination:</strong> the first sequence number is redirected to the destination; later copies with the same sequence are counted as duplicates and dropped.</p>
+            <p><strong>Kernel/userspace split:</strong> userspace loads programs and fills BPF maps; packet decisions happen in the kernel at XDP speed.</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel span-4">
+          <p class="eyebrow">Live Counters</p>
+          <h2>Forward Direction</h2>
+          <div class="metrics" id="forwardMetrics"></div>
+        </article>
+        <article class="panel span-4">
+          <p class="eyebrow">Live Counters</p>
+          <h2>Reverse Direction</h2>
+          <div class="metrics" id="reverseMetrics"></div>
+        </article>
+        <article class="panel span-4">
+          <p class="eyebrow">System State</p>
+          <h2>Interfaces</h2>
+          <div class="links" id="links"></div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel span-6">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Command Output</p>
+              <h2>Dashboard Actions</h2>
+            </div>
+          </div>
+          <pre id="actionLog" class="terminal">Waiting for actions...</pre>
+        </article>
+        <article class="panel span-6">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">FRER Process Logs</p>
+              <h2>Attachment + Stats</h2>
+            </div>
+          </div>
+          <div class="tabs" id="logTabs"></div>
+          <pre id="frerLog" class="terminal">Start FRER to see logs.</pre>
+        </article>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
