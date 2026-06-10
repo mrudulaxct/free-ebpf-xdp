@@ -10,145 +10,177 @@
     <main class="shell">
       <section class="hero">
         <div>
-          <p class="eyebrow">Kernel-Level FRER Implementation</p>
-          <h1>Per-Packet Service Protection Demo</h1>
+          <p class="eyebrow">eBPF/XDP FRER Demo</p>
+          <h1>Packet Replication and Recovery Dashboard</h1>
           <p class="lead">
-            Build the eBPF/XDP program, create the veth topology, attach replication and
-            elimination, run traffic, and demonstrate path failure recovery from one screen.
+            Run the same Linux XDP demo from guided controls: create the network,
+            attach FRER, send traffic, and show how one failed path is tolerated.
           </p>
         </div>
-        <div class="hero-status">
+        <div class="status-strip">
           <span id="rootBadge" class="badge">checking</span>
           <span id="buildBadge" class="badge">build</span>
+          <span id="topologyBadge" class="badge">network</span>
           <span id="frerBadge" class="badge">FRER</span>
+          <span id="trafficBadge" class="badge">traffic</span>
         </div>
       </section>
 
-      <section class="diagram-band">
-        <div class="topology">
-          <div class="node">
-            <span>PC1 namespace</span>
-            <strong>10.0.0.1</strong>
+      <section class="overview">
+        <div class="flow">
+          <div class="flow-card endpoint">
+            <span>Sender</span>
+            <strong>PC1</strong>
+            <small>10.0.0.1</small>
           </div>
-          <div class="pipe main">pc1-a.VLAN 100</div>
-          <div class="node accent">
-            <span>XDP Replicate</span>
-            <strong>R-tag + sequence</strong>
+          <div class="flow-arrow">VLAN 100</div>
+          <div class="flow-card process">
+            <span>Replication</span>
+            <strong>Add sequence number</strong>
+            <small>XDP inserts the FRER R-tag</small>
           </div>
-          <div class="split">
-            <div id="pathAb0" class="path">ab0 -> ba0</div>
-            <div id="pathAb1" class="path">ab1 -> ba1</div>
+          <div class="paths">
+            <div id="pathAb0" class="path-card">
+              <span>Path A</span>
+              <strong>active</strong>
+              <small>ab0 to ba0</small>
+            </div>
+            <div id="pathAb1" class="path-card">
+              <span>Path B</span>
+              <strong>active</strong>
+              <small>ab1 to ba1</small>
+            </div>
           </div>
-          <div class="node accent">
-            <span>XDP Eliminate</span>
-            <strong>first copy passes</strong>
+          <div class="flow-card process">
+            <span>Elimination</span>
+            <strong>Drop duplicates</strong>
+            <small>first sequence wins</small>
           </div>
-          <div class="pipe main">pc2-b.VLAN 100</div>
-          <div class="node">
-            <span>PC2 namespace</span>
-            <strong>10.0.0.2</strong>
+          <div class="flow-arrow">VLAN 100</div>
+          <div class="flow-card endpoint">
+            <span>Receiver</span>
+            <strong>PC2</strong>
+            <small>10.0.0.2</small>
           </div>
         </div>
       </section>
 
-      <section class="grid">
-        <article class="panel span-7">
+      <section class="workspace">
+        <article class="panel control-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Guided Execution</p>
-              <h2>Demo Steps</h2>
+              <p class="eyebrow">Run The Demo</p>
+              <h2>Controls</h2>
             </div>
             <button class="ghost" id="refreshBtn">Refresh</button>
           </div>
-          <div class="steps">
+
+          <button class="primary-action" data-action="quick_start">
+            <span>Start complete demo</span>
+            <small>Build, create network, and attach FRER in the correct order</small>
+          </button>
+
+          <div class="step-list">
             <button data-action="build">
               <span class="step-num">1</span>
-              <span><strong>Build</strong><small>Compile XDP object and userspace loader</small></span>
+              <span><strong>Build project</strong><small>Compile the XDP object and loader</small></span>
             </button>
             <button data-action="setup">
               <span class="step-num">2</span>
-              <span><strong>Create topology</strong><small>Make PC namespaces and two redundant veth paths</small></span>
+              <span><strong>Create network</strong><small>Make sender, receiver, and two paths</small></span>
             </button>
             <button data-action="start_frer">
               <span class="step-num">3</span>
-              <span><strong>Attach FRER</strong><small>Start forward and reverse replication/elimination programs</small></span>
+              <span><strong>Attach FRER</strong><small>Load replication and elimination programs</small></span>
             </button>
             <button data-action="ping">
               <span class="step-num">4</span>
-              <span><strong>Run protected ping</strong><small>Send VLAN 100 traffic from PC1 side to PC2</small></span>
+              <span><strong>Run test traffic</strong><small>Ping PC2 through protected VLAN traffic</small></span>
             </button>
             <button data-action="fail_ab0">
               <span class="step-num">5</span>
-              <span><strong>Fail path 1</strong><small>Bring ab0 down; traffic should continue over ab1</small></span>
+              <span><strong>Fail Path A</strong><small>Traffic should continue through Path B</small></span>
             </button>
             <button data-action="recover_ab0">
               <span class="step-num">6</span>
-              <span><strong>Recover path 1</strong><small>Bring ab0 back up</small></span>
+              <span><strong>Recover Path A</strong><small>Bring the first redundant path back</small></span>
             </button>
             <button data-action="fail_both">
               <span class="step-num">7</span>
-              <span><strong>Fail both paths</strong><small>Show that service stops only when all redundancy is lost</small></span>
+              <span><strong>Fail both paths</strong><small>Show traffic stops when redundancy is gone</small></span>
             </button>
             <button data-action="recover_both">
               <span class="step-num">8</span>
-              <span><strong>Recover both paths</strong><small>Restore ab0 and ab1</small></span>
+              <span><strong>Recover both paths</strong><small>Restore the full protected network</small></span>
             </button>
             <button data-action="cleanup" class="danger">
               <span class="step-num">9</span>
-              <span><strong>Cleanup</strong><small>Stop programs and remove namespaces, links, and pinned BPF links</small></span>
+              <span><strong>Reset demo</strong><small>Stop programs and remove demo network</small></span>
             </button>
           </div>
         </article>
 
-        <article class="panel span-5">
-          <p class="eyebrow">Committee View</p>
-          <h2>What To Explain</h2>
-          <div class="talk-track">
-            <p><strong>FRER goal:</strong> send duplicate frames through independent paths so one path can fail without service interruption.</p>
-            <p><strong>Replication:</strong> XDP reads VLAN 100, inserts a 6-byte R-tag sequence number, then broadcasts the frame to ab0 and ab1.</p>
-            <p><strong>Elimination:</strong> the first sequence number is redirected to the destination; later copies with the same sequence are counted as duplicates and dropped.</p>
-            <p><strong>Kernel/userspace split:</strong> userspace loads programs and fills BPF maps; packet decisions happen in the kernel at XDP speed.</p>
+        <aside class="panel state-panel">
+          <p class="eyebrow">Current State</p>
+          <h2 id="stateTitle">Waiting to start</h2>
+          <p id="stateMessage" class="state-message">Start the complete demo to prepare the network and attach FRER.</p>
+          <div class="state-grid">
+            <div><span>Network</span><strong id="networkState">not created</strong></div>
+            <div><span>XDP Programs</span><strong id="programState">stopped</strong></div>
+            <div><span>Path A</span><strong id="pathAState">not created</strong></div>
+            <div><span>Path B</span><strong id="pathBState">not created</strong></div>
           </div>
-        </article>
+        </aside>
       </section>
 
-      <section class="grid">
-        <article class="panel span-4">
-          <p class="eyebrow">Live Counters</p>
-          <h2>Forward Direction</h2>
-          <div class="metrics" id="forwardMetrics"></div>
-        </article>
-        <article class="panel span-4">
-          <p class="eyebrow">Live Counters</p>
-          <h2>Reverse Direction</h2>
-          <div class="metrics" id="reverseMetrics"></div>
-        </article>
-        <article class="panel span-4">
-          <p class="eyebrow">System State</p>
-          <h2>Interfaces</h2>
-          <div class="links" id="links"></div>
-        </article>
-      </section>
-
-      <section class="grid">
-        <article class="panel span-6">
+      <section class="metrics-row">
+        <article class="panel metric-panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Command Output</p>
-              <h2>Dashboard Actions</h2>
+              <p class="eyebrow">Live Counters</p>
+              <h2>Forward: PC1 to PC2</h2>
+            </div>
+          </div>
+          <p class="hint" id="forwardHint">Counters update after FRER is attached and test traffic is running.</p>
+          <div class="metrics" id="forwardMetrics"></div>
+        </article>
+
+        <article class="panel metric-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Live Counters</p>
+              <h2>Return: PC2 to PC1</h2>
+            </div>
+          </div>
+          <p class="hint" id="reverseHint">Return direction is needed so ping replies are also protected.</p>
+          <div class="metrics" id="reverseMetrics"></div>
+        </article>
+      </section>
+
+      <section class="logs-row">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Action History</p>
+              <h2>What The Dashboard Ran</h2>
             </div>
           </div>
           <pre id="actionLog" class="terminal">Waiting for actions...</pre>
         </article>
-        <article class="panel span-6">
+
+        <article class="panel">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">FRER Process Logs</p>
-              <h2>Attachment + Stats</h2>
+              <p class="eyebrow">Program Output</p>
+              <h2>XDP Loader Counters</h2>
             </div>
           </div>
+          <p class="hint">
+            These are the four background FRER programs: forward replicate, forward eliminate,
+            return replicate, and return eliminate.
+          </p>
           <div class="tabs" id="logTabs"></div>
-          <pre id="frerLog" class="terminal">Start FRER to see logs.</pre>
+          <pre id="frerLog" class="terminal">Attach FRER to see program output.</pre>
         </article>
       </section>
     </main>

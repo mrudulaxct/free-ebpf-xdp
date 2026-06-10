@@ -21,6 +21,8 @@ ACTION_LOG = []
 ACTION_LOCK = threading.Lock()
 RUNNING_ACTIONS = {}
 RUNNING_LOCK = threading.Lock()
+DEMO_LINKS = ["pc1-a", "pc2-b", "ab0", "ab1", "ba0", "ba1"]
+LOG_NAMES = ["fwd-replicate", "fwd-eliminate", "rev-replicate", "rev-eliminate"]
 
 STATS_RE = re.compile(
     r"rx=(?P<rx>\d+)\s+replicated=(?P<replicated>\d+)\s+passed=(?P<passed>\d+)\s+"
@@ -72,8 +74,52 @@ def run_command(action, cmd, timeout=None):
             RUNNING_ACTIONS.pop(action, None)
 
 
-def start_action(action, cmd, timeout=None):
-    thread = threading.Thread(target=run_command, args=(action, cmd, timeout), daemon=True)
+def run_sequence(action, steps):
+    with RUNNING_LOCK:
+        if RUNNING_ACTIONS.get(action):
+            append_action(f"{action} is already running")
+            return
+        RUNNING_ACTIONS[action] = True
+
+    try:
+        append_action("Starting complete demo setup: build -> topology -> attach FRER")
+        proc = None
+        for label, cmd, timeout in steps:
+            append_action(f"{label}")
+            append_action(f"$ {shlex.join(cmd)}")
+            proc = subprocess.Popen(
+                cmd,
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                start_new_session=True,
+            )
+            for line in proc.stdout or []:
+                append_action(line)
+            code = proc.wait(timeout=timeout)
+            append_action(f"{label} finished with exit code {code}")
+            if code != 0:
+                append_action("Stopped because this step failed.")
+                return
+        append_action("Demo is ready. Click Run test traffic to update the counters.")
+    except subprocess.TimeoutExpired:
+        if proc:
+            os.killpg(proc.pid, signal.SIGTERM)
+        append_action(f"{action} timed out")
+    except Exception as exc:
+        append_action(f"{action} failed: {exc}")
+    finally:
+        with RUNNING_LOCK:
+            RUNNING_ACTIONS.pop(action, None)
+
+
+def start_action(action, cmd, timeout=None, steps=None):
+    if steps:
+        thread = threading.Thread(target=run_sequence, args=(action, steps), daemon=True)
+    else:
+        thread = threading.Thread(target=run_command, args=(action, cmd, timeout), daemon=True)
     thread.start()
 
 
@@ -109,6 +155,15 @@ def link_state(name):
     return {"name": name, "exists": True, "state": state, "raw": out}
 
 
+def demo_links():
+    return [link_state(name) for name in DEMO_LINKS]
+
+
+def topology_ready(links=None):
+    links = links if links is not None else demo_links()
+    return all(item["exists"] for item in links)
+
+
 def namespace_exists(name):
     code, out, _ = command_output(["ip", "netns", "list"])
     return code == 0 and any(line.split()[0] == name for line in out.splitlines() if line.strip())
@@ -136,9 +191,8 @@ def parse_log_stats(lines):
 
 
 def collect_logs():
-    names = ["fwd-replicate", "fwd-eliminate", "rev-replicate", "rev-eliminate"]
     logs = {}
-    for name in names:
+    for name in LOG_NAMES:
         lines = read_tail(LOG_DIR / f"{name}.log", 80)
         logs[name] = {"lines": lines, "stats": parse_log_stats(lines)}
     return logs
@@ -146,9 +200,13 @@ def collect_logs():
 
 def collect_status():
     build_ok = (ROOT / "build/frerctl").exists() and (ROOT / "build/frer_kern.o").exists()
-    links = [link_state(name) for name in ["pc1-a", "pc2-b", "ab0", "ab1", "ba0", "ba1"]]
+    links = demo_links()
     pids = pid_status()
     logs = collect_logs()
+    ready = topology_ready(links)
+    frer_running = any(item["alive"] for item in pids)
+    latest_stats = [logs[name]["stats"] for name in LOG_NAMES if logs[name]["stats"]]
+    traffic_seen = any(stats and stats.get("rx", 0) > 0 for stats in latest_stats)
     with ACTION_LOCK:
         action_log = list(ACTION_LOG)
     with RUNNING_LOCK:
@@ -158,9 +216,11 @@ def collect_status():
         "isRoot": os.geteuid() == 0,
         "vid": VID,
         "buildOk": build_ok,
+        "topologyReady": ready,
         "namespaces": {"pc1": namespace_exists("pc1"), "pc2": namespace_exists("pc2")},
         "links": links,
-        "frerRunning": any(item["alive"] for item in pids),
+        "frerRunning": frer_running,
+        "trafficSeen": traffic_seen,
         "pids": pids,
         "logs": logs,
         "actionLog": action_log,
@@ -173,7 +233,16 @@ def action_command(action):
         "build": (["make"], 60),
         "setup": (["./scripts/setup-veth-demo.sh"], 30),
         "start_frer": (["./scripts/run-veth-frer.sh"], 20),
-        "ping": (["ping", "-I", f"pc1-a.{VID}", "-c", "5", "10.0.0.2"], 15),
+        "quick_start": (
+            None,
+            None,
+            [
+                ("Build eBPF and userspace loader", ["make"], 60),
+                ("Create Linux veth topology", ["./scripts/setup-veth-demo.sh"], 30),
+                ("Attach FRER programs", ["./scripts/run-veth-frer.sh"], 20),
+            ],
+        ),
+        "ping": (["ping", "-I", f"pc1-a.{VID}", "-c", "8", "10.0.0.2"], 18),
         "fail_ab0": (["ip", "link", "set", "ab0", "down"], 10),
         "recover_ab0": (["ip", "link", "set", "ab0", "up"], 10),
         "fail_both": (["sh", "-c", "ip link set ab0 down && ip link set ab1 down"], 10),
@@ -181,6 +250,25 @@ def action_command(action):
         "cleanup": (["./scripts/cleanup-veth-demo.sh"], 30),
     }
     return commands.get(action)
+
+
+def explain_precondition(action):
+    if action == "build":
+        return None
+    if os.geteuid() != 0:
+        return "Start the dashboard with sudo: sudo make dashboard"
+    if action in {"start_frer", "ping", "fail_ab0", "recover_ab0", "fail_both", "recover_both"}:
+        if not topology_ready():
+            return "Create the topology first. Click Start complete demo, or click Create network."
+    if action == "start_frer" and not (ROOT / "build/frerctl").exists():
+        return "Build the project first, then attach FRER."
+    if action in {"ping", "fail_ab0", "recover_ab0", "fail_both", "recover_both"}:
+        if action == "ping":
+            if not (ROOT / "build/frerctl").exists():
+                return "Build the project and attach FRER before running test traffic."
+        if not any(item["alive"] for item in pid_status()):
+            return "Attach FRER first so the XDP programs are running."
+    return None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -218,12 +306,17 @@ class Handler(BaseHTTPRequestHandler):
         if not item:
             self.send_error(400, "unknown action")
             return
-        cmd, timeout = item
-        if action != "build" and os.geteuid() != 0:
-            append_action("privileged demo actions need root. Start with: sudo make dashboard")
-            self.send_json({"ok": False, "error": "Start dashboard with sudo for network/XDP actions."}, status=403)
+        reason = explain_precondition(action)
+        if reason:
+            append_action(reason)
+            self.send_json({"ok": False, "error": reason}, status=409)
             return
-        start_action(action, cmd, timeout)
+        if len(item) == 3:
+            cmd, timeout, steps = item
+            start_action(action, cmd, timeout, steps=steps)
+        else:
+            cmd, timeout = item
+            start_action(action, cmd, timeout)
         self.send_json({"ok": True, "action": action})
 
     def send_json(self, data, status=200):

@@ -190,17 +190,20 @@ http://127.0.0.1:8080
 
 The dashboard provides buttons for:
 
+- Start complete demo, which builds, creates the network, and attaches FRER in order
 - Build
-- Create the veth topology
-- Attach the four FRER/XDP programs
-- Run protected ping traffic
-- Fail one redundant path
+- Create the veth topology separately if you want to explain each step
+- Attach the four FRER/XDP programs after the topology exists
+- Run protected ping traffic and watch live counters
+- Fail and recover one redundant path
 - Recover the path
 - Fail both paths
 - Cleanup
 
-It also shows the topology, live interface state, FRER counters, command output,
-and the key explanation points to present to a review committee.
+It also shows a simplified sender-to-receiver flow, live path state, FRER
+counters, dashboard action history, and the FRER loader output. The dashboard
+blocks invalid steps, such as attaching FRER before the demo interfaces exist,
+so the review flow is easier to explain.
 
 ## Running on Real Interfaces
 
