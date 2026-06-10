@@ -94,6 +94,19 @@ function renderMetrics(target, stats) {
     .join("");
 }
 
+function combineDirection(status, replicateName, eliminateName) {
+  const replicate = status.logs?.[replicateName]?.stats || {};
+  const eliminate = status.logs?.[eliminateName]?.stats || {};
+  return {
+    rx: replicate.rx ?? 0,
+    replicated: replicate.replicated ?? 0,
+    passed: eliminate.passed ?? 0,
+    duplicates: eliminate.duplicates ?? 0,
+    malformed: (replicate.malformed ?? 0) + (eliminate.malformed ?? 0),
+    no_config: (replicate.no_config ?? 0) + (eliminate.no_config ?? 0),
+  };
+}
+
 function renderPaths(status) {
   const ab0 = byName(status, "ab0");
   const ab1 = byName(status, "ab1");
@@ -200,8 +213,8 @@ function render() {
   setBadge(el("frerBadge"), status.frerRunning ? "FRER running" : "FRER stopped", status.frerRunning ? "ok" : "warn");
   setBadge(el("trafficBadge"), status.trafficSeen ? "traffic seen" : "no traffic yet", status.trafficSeen ? "ok" : "warn");
 
-  const forwardStats = status.logs?.["fwd-eliminate"]?.stats || status.logs?.["fwd-replicate"]?.stats;
-  const reverseStats = status.logs?.["rev-eliminate"]?.stats || status.logs?.["rev-replicate"]?.stats;
+  const forwardStats = combineDirection(status, "fwd-replicate", "fwd-eliminate");
+  const reverseStats = combineDirection(status, "rev-replicate", "rev-eliminate");
   renderMetrics(el("forwardMetrics"), forwardStats);
   renderMetrics(el("reverseMetrics"), reverseStats);
   renderPaths(status);

@@ -206,7 +206,10 @@ def collect_status():
     ready = topology_ready(links)
     frer_running = any(item["alive"] for item in pids)
     latest_stats = [logs[name]["stats"] for name in LOG_NAMES if logs[name]["stats"]]
-    traffic_seen = any(stats and stats.get("rx", 0) > 0 for stats in latest_stats)
+    traffic_seen = any(
+        stats and (stats.get("replicated", 0) > 0 or stats.get("passed", 0) > 0)
+        for stats in latest_stats
+    )
     with ACTION_LOCK:
         action_log = list(ACTION_LOG)
     with RUNNING_LOCK:
@@ -240,9 +243,10 @@ def action_command(action):
                 ("Build eBPF and userspace loader", ["make"], 60),
                 ("Create Linux veth topology", ["./scripts/setup-veth-demo.sh"], 30),
                 ("Attach FRER programs", ["./scripts/run-veth-frer.sh"], 20),
+                ("Send initial protected traffic", ["ip", "netns", "exec", "pc1", "ping", "-I", f"eth0.{VID}", "-c", "8", "10.0.0.2"], 18),
             ],
         ),
-        "ping": (["ping", "-I", f"pc1-a.{VID}", "-c", "8", "10.0.0.2"], 18),
+        "ping": (["ip", "netns", "exec", "pc1", "ping", "-I", f"eth0.{VID}", "-c", "8", "10.0.0.2"], 18),
         "fail_ab0": (["ip", "link", "set", "ab0", "down"], 10),
         "recover_ab0": (["ip", "link", "set", "ab0", "up"], 10),
         "fail_both": (["sh", "-c", "ip link set ab0 down && ip link set ab1 down"], 10),
@@ -321,11 +325,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_json(self, data, status=200):
         body = json.dumps(data).encode("utf-8")
-        self.send_response(status)
-        self.send_header("content-type", "application/json")
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
     def send_file(self, path, content_type):
         try:
@@ -333,11 +340,14 @@ class Handler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_error(404)
             return
-        self.send_response(200)
-        self.send_header("content-type", content_type)
-        self.send_header("content-length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(200)
+            self.send_header("content-type", content_type)
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except BrokenPipeError:
+            pass
 
     def log_message(self, fmt, *args):
         return

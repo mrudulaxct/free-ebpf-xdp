@@ -36,13 +36,13 @@ ip netns exec "$NS1" ip link set eth0 up
 ip netns exec "$NS2" ip link set lo up
 ip netns exec "$NS2" ip link set eth0 up
 
-ip link add link pc1-a name pc1-a."$VID" type vlan id "$VID"
-ip link add link pc2-b name pc2-b."$VID" type vlan id "$VID"
-ip link set pc1-a."$VID" up
-ip link set pc2-b."$VID" up
+ip netns exec "$NS1" ip link add link eth0 name eth0."$VID" type vlan id "$VID"
+ip netns exec "$NS2" ip link add link eth0 name eth0."$VID" type vlan id "$VID"
+ip netns exec "$NS1" ip link set eth0."$VID" up
+ip netns exec "$NS2" ip link set eth0."$VID" up
 
-ip addr add 10.0.0.1/24 dev pc1-a."$VID"
-ip addr add 10.0.0.2/24 dev pc2-b."$VID"
+ip netns exec "$NS1" ip addr add 10.0.0.1/24 dev eth0."$VID"
+ip netns exec "$NS2" ip addr add 10.0.0.2/24 dev eth0."$VID"
 
 echo "Demo topology created."
 echo "Build with: make"
@@ -56,4 +56,4 @@ echo "Return direction, needed for ping replies:"
 echo "  sudo ./build/frerctl replicate --ingress pc2-b --egress ba0,ba1 --vid $VID"
 echo "  sudo ./build/frerctl eliminate --ingress ab0,ab1 --egress pc1-a --vid $VID"
 echo
-echo "Ping through protected stream: ping -I pc1-a.$VID 10.0.0.2"
+echo "Ping through protected stream: sudo ip netns exec $NS1 ping -I eth0.$VID 10.0.0.2"

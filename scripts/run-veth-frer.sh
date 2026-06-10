@@ -7,11 +7,17 @@ LOG_DIR="${LOG_DIR:-/tmp/frer-ebpf-xdp}"
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_DIR"/*.log "$LOG_DIR"/pids
 
+if [ "$(id -u)" -eq 0 ]; then
+  RUN_AS_ROOT=()
+else
+  RUN_AS_ROOT=(sudo)
+fi
+
 start() {
   local name="$1"
   shift
   echo "Starting $name"
-  sudo ./build/frerctl "$@" --vid "$VID" >"$LOG_DIR/$name.log" 2>&1 &
+  "${RUN_AS_ROOT[@]}" ./build/frerctl "$@" --vid "$VID" >"$LOG_DIR/$name.log" 2>&1 &
   echo "$!" >> "$LOG_DIR/pids"
 }
 

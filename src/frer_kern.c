@@ -77,7 +77,7 @@ struct {
 } recovery SEC(".maps");
 
 struct {
-	__uint(type, BPF_MAP_TYPE_DEVMAP_HASH);
+	__uint(type, BPF_MAP_TYPE_DEVMAP);
 	__uint(max_entries, 16);
 	__type(key, __u32);
 	__type(value, __u32);
@@ -106,7 +106,7 @@ static __always_inline int parse_vlan(void *data, void *data_end,
 	*eth = data;
 	if ((*eth)->h_proto != bpf_htons(ETH_P_8021Q) &&
 	    (*eth)->h_proto != bpf_htons(ETH_P_8021AD))
-		return -1;
+		return -2;
 
 	*vlan = data + ETH_SIZE;
 	return 0;
@@ -230,10 +230,12 @@ int xdp_replicate(struct xdp_md *ctx)
 	void *data_end = (void *)(long)ctx->data_end;
 	struct ethhdr *eth;
 	struct vlan_hdr *vlan;
+	int parse_result;
 
-	if (parse_vlan(data, data_end, &eth, &vlan) < 0) {
+	parse_result = parse_vlan(data, data_end, &eth, &vlan);
+	if (parse_result < 0) {
 		if (s)
-			s->malformed++;
+			s->malformed += parse_result == -1;
 		return XDP_PASS;
 	}
 
@@ -278,10 +280,12 @@ int xdp_eliminate(struct xdp_md *ctx)
 	void *data_end = (void *)(long)ctx->data_end;
 	struct ethhdr *eth;
 	struct vlan_hdr *vlan;
+	int parse_result;
 
-	if (parse_vlan(data, data_end, &eth, &vlan) < 0) {
+	parse_result = parse_vlan(data, data_end, &eth, &vlan);
+	if (parse_result < 0) {
 		if (s)
-			s->malformed++;
+			s->malformed += parse_result == -1;
 		return XDP_PASS;
 	}
 

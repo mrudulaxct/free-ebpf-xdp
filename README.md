@@ -139,7 +139,7 @@ tail -f /tmp/frer-ebpf-xdp/*.log
 Test:
 
 ```bash
-ping -I pc1-a.100 10.0.0.2
+sudo ip netns exec pc1 ping -I eth0.100 10.0.0.2
 ```
 
 Simulate one path failure:
