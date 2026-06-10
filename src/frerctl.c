@@ -159,6 +159,7 @@ static void print_stats(int stats_fd)
 
 int main(int argc, char **argv)
 {
+	int err;
 	const char *prog_path = argv[0];
 	const char *mode, *obj_path = "build/frer_kern.o";
 	char *ingress_csv = NULL, *egress_csv = NULL;

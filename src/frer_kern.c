@@ -15,6 +15,19 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
 
+#ifndef VLAN_VID_MASK
+#define VLAN_VID_MASK 0x0FFF
+#endif
+
+#ifndef __VMLINUX_H__
+
+struct vlan_hdr {
+    __be16 h_vlan_TCI;
+    __be16 h_vlan_encapsulated_proto;
+};
+
+#endif
+
 #define ETH_SIZE 14
 #define VLAN_SIZE 4
 #define RTAG_SIZE 6
